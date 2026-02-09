@@ -4,8 +4,6 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.core.os_manager import ChromeType
 
 app = Flask(__name__)
 
@@ -15,21 +13,22 @@ def get_data():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-
-    # Instalación automática del driver compatible
-    service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
     
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # En Docker, Chrome se instala en esta ruta por defecto
+    chrome_options.binary_location = "/usr/bin/google-chrome"
+    
+    # Ya no necesitamos webdriver-manager, Selenium 4 detecta el driver solo en Linux
+    driver = webdriver.Chrome(options=chrome_options)
     
     try:
         driver.get("https://cw-simulador1.vercel.app/")
-        # Reducimos un poco el tiempo para evitar timeouts de Render (máx 30s)
-        driver.implicitly_wait(15) 
+        # Espera de seguridad para que React cargue
+        driver.implicitly_wait(15)
         
         tables = pd.read_html(driver.page_source)
         if tables:
             return tables[0]
-        return pd.DataFrame({"Error": ["No se encontró la tabla"]})
+        return pd.DataFrame({"Error": ["Tabla no encontrada"]})
     except Exception as e:
         return pd.DataFrame({"Error": [str(e)]})
     finally:
