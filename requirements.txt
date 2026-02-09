@@ -1,6 +1,5 @@
 flask
 pandas
 selenium
-webdriver-manager
 lxml
 html5lib
