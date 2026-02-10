@@ -14,53 +14,52 @@ def get_data():
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    # Estas opciones ayudan a consumir menos RAM
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--proxy-server='direct://'")
+    chrome_options.add_argument("--proxy-bypass-list=*")
     chrome_options.binary_location = "/usr/bin/google-chrome"
     
     driver = webdriver.Chrome(options=chrome_options)
     
     try:
+        # Reducimos el tiempo de carga de página a 20 segundos
+        driver.set_page_load_timeout(20)
         driver.get("https://cw-simulador1.vercel.app/")
         
-        # Esperar a que la tabla sea visible (ajustamos el selector)
-        wait = WebDriverWait(driver, 20)
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+        # Espera máxima de 10 segundos para que aparezca la tabla
+        wait = WebDriverWait(driver, 10)
         
-        # Obtenemos el HTML de la tabla específicamente
-        tabla_html = driver.find_element(By.TAG_NAME, "table").get_attribute('outerHTML')
+        # Intentamos localizar la tabla. Si falla, tomamos lo que haya.
+        try:
+            element = wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+            tabla_html = element.get_attribute('outerHTML')
+        except:
+            # Si no encuentra <table>, intenta leer todo el body como último recurso
+            tabla_html = driver.page_source
         
-        # Convertimos a DataFrame
         df_list = pd.read_html(tabla_html)
+        
         if df_list:
             df = df_list[0]
-            # Limpieza: Eliminamos columnas o filas completamente vacías
-            df = df.dropna(how='all', axis=0).dropna(how='all', axis=1)
-            return df
+            return df.dropna(how='all', axis=0)
         
-        return pd.DataFrame({"Mensaje": ["No se encontró estructura de tabla"]})
+        return pd.DataFrame({"Estado": ["Esperando datos... recarga en unos segundos"]})
     
     except Exception as e:
-        return pd.DataFrame({"Error": [f"Error en el scraping: {str(e)}"]})
+        return pd.DataFrame({"Error": [f"Reintenta en un momento: {str(e)}"]})
     finally:
         driver.quit()
 
 @app.route('/')
 def home():
     df = get_data()
-    
-    # Generamos un HTML muy simple y limpio para Excel
-    # 'border=1' ayuda a Excel a identificar las celdas
-    html_output = df.to_html(index=False, border=1, justify='center')
-    
-    # Envolvemos en etiquetas HTML básicas para que sea una página "plana"
-    return f"""
-    <html>
-        <head><title>Datos para Excel</title></head>
-        <body>
-            {html_output}
-        </body>
-    </html>
-    """
+    # Generamos HTML puro sin CSS pesado
+    return df.to_html(index=False, border=1)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    # Render usa el puerto 10000 por defecto en muchos casos, os.environ lo detecta
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
